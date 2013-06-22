@@ -31,55 +31,48 @@ class PBOExtractor {
     }
 
     public static function extract($fileToExtract,$pboFile) {
-        $pboString = file_get_contents($pboFile, FILE_USE_INCLUDE_PATH);
-        return PBOExtractor::extractFromString($fileToExtract,$pboString);
+        $pboFile = fopen($pboFile, 'r');
+        $pboStream = fopen("php://memory", 'r+');
+        stream_copy_to_stream($pboFile,$pboStream);
+        rewind($pboStream);
+        fclose($pboFile);
+
+        $result = PBOExtractor::extractFromStream($fileToExtract,$pboStream);
+        fclose($pboStream);
+        return $result;
     }
 
-    public static function extractFromString($fileToExtract,$pboString) {
+    public static function extractFromStream($fileToExtract,$pboStream) {
         PBOExtractor::$lastError = array('code' => 0, 'message' => "");
-/*
-        $then = microtime();
-        printf("MEM:  %d<br/>\nPEAK: %d<br/>\n", memory_get_usage(), memory_get_peak_usage());
-*/
+
         $i = 0;
         $headers = array();
         $searchedHeader = array();
         //Consume all the headers
         do {
-            $header = PBOHeaderEntry::createByConsumeString($pboString);
+            $header = PBOHeaderEntry::createByConsumeStream($pboStream);
             $headers[$i] = $header;
             if ($header->filename == $fileToExtract) {
                 $searchedHeader = $header;
             }
             $i++;
-        } while (strlen($pboString) > 0 && !$header->isEndOfHeader());
-/*
-        $now = microtime();
-        printf("MEM:  %d<br/>\nPEAK: %d<br/>\n", memory_get_usage(), memory_get_peak_usage());
-        echo "Header Elapsed: ".($now-$then)."<br/>\n";
-*/
+        } while (!feof($pboStream) && !$header->isEndOfHeader());
+
         if (empty($searchedHeader)) {
             PBOExtractor::$lastError = array('code' => 1, 'message' => "Could not find ".$fileToExtract);
             return false;
         }
-/*
-        $then = microtime();
-        printf("MEM:  %d<br/>\nPEAK: %d<br/>\n", memory_get_usage(), memory_get_peak_usage());
-*/
+
         $file = null;
         foreach ($headers as $header) {
             if ($header == $searchedHeader) {
-                $file = PBOFileEntry::createByConsumeString($pboString,$header);
+                $file = PBOFileEntry::createByConsumeStream($pboStream,$header);
                 break;
             } else {
-                PBOFileEntry::consumeFile($pboString,$header);
+                PBOFileEntry::consumeFile($pboStream,$header);
             }
         }
-/*
-        $now = microtime();
-        printf("MEM:  %d<br/>\nPEAK: %d<br/>\n", memory_get_usage(), memory_get_peak_usage());
-        echo "Files Elapsed: ".($now-$then)."<br/>\n";
-*/
+
         if ($file->isCompressed) {
             PBOExtractor::$lastError = array('code' => 2, 'message' => "File ".$fileToExtract." is compressed. Compressed files are not supported yet.");
             return $file;
@@ -92,4 +85,5 @@ class PBOExtractor {
 
         return $file;
     }
+
 }

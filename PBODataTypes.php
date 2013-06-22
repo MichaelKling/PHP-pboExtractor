@@ -19,37 +19,38 @@ class PBOHeaderEntry {
     public $timestamp;
     public $datasize;
 
-    public static function createByConsumeString(&$string) {
-        //Taking out a buffer in order to not
-        $temporaryHeaderString = substr( $string, 0, 100 + 4*5);
-
+    public static function createByConsumeStream($stream) {
         $pboHeaderEntry = new PBOHeaderEntry();
 
-        $fileNameLength = strpos( $temporaryHeaderString, "\0");
-        $pboHeaderEntry->filename = substr( $temporaryHeaderString, 0, $fileNameLength);
-        $temporaryHeaderString = substr( $temporaryHeaderString, $fileNameLength+1);
+        $pboHeaderEntry->filename = "";
+        do {
+            $char = fread($stream,1);
+            if ($char != "\0") {
+                $pboHeaderEntry->filename .= $char;
+            }
+        } while (!feof($stream) && $char != "\0");
 
-        $array = unpack("V",$temporaryHeaderString);
+
+
+        $longValue = fread($stream,4);
+        $array = unpack("V",$longValue);
         $pboHeaderEntry->packingMethod = $array[1];
-        $temporaryHeaderString = substr( $temporaryHeaderString, 4);
 
-        $array = unpack("V",$temporaryHeaderString);
+        $longValue = fread($stream,4);
+        $array = unpack("V",$longValue);
         $pboHeaderEntry->originalSize = $array[1];
-        $temporaryHeaderString = substr( $temporaryHeaderString, 4);
 
-        $array = unpack("V",$temporaryHeaderString);
+        $longValue = fread($stream,4);
+        $array = unpack("V",$longValue);
         $pboHeaderEntry->reserved = $array[1];
-        $temporaryHeaderString = substr( $temporaryHeaderString, 4);
 
-        $array = unpack("V",$temporaryHeaderString);
+        $longValue = fread($stream,4);
+        $array = unpack("V",$longValue);
         $pboHeaderEntry->timestamp = $array[1];
-        $temporaryHeaderString = substr( $temporaryHeaderString, 4);
 
-        $array = unpack("V",$temporaryHeaderString);
+        $longValue = fread($stream,4);
+        $array = unpack("V",$longValue);
         $pboHeaderEntry->datasize = $array[1];
-        $temporaryHeaderString = substr( $temporaryHeaderString, 4);
-
-        $string = substr( $string, $fileNameLength+1 + 4*5);
 
         return $pboHeaderEntry;
     }
@@ -60,14 +61,24 @@ class PBOHeaderEntry {
 }
 
 class PBOFileEntry {
-    public $rawData = "";
-    public $content = "";
+    public $content = null;
     public $isCompressed = false;
     public $isRapified = false;
-    public static function createByConsumeString(&$string,$header) {
+    public $pboHeader = null;
+    public static function createByConsumeStream($stream,$header) {
         $file = new PBOFileEntry();
-        $file->rawData = substr($string,0,$header->datasize);
-        $string = substr($string,$header->datasize);
+
+        $file->pboHeader = $header;
+
+        if ($file->content) {
+            fclose($file->content);
+            $file->content = null;
+        }
+        $file->content = fopen("php://memory", 'r+');
+        if ($header->datasize > 0) {
+            stream_copy_to_stream($stream,$file->content,$header->datasize);
+        }
+        rewind($file->content);
 
         if ($header->packingMethod == PBOHeaderEntry::PACKINGMETHOD_PACKED) {
             $file->isCompressed = true;
@@ -75,21 +86,24 @@ class PBOFileEntry {
             return $file;
         }
 
-        $file->isRapified = $file->isRapified();
-        if ($file->isRapified) {
-            $file->content =  RAPConverter::unRap($file->rawData);
-        } else {
-            $file->content = &$file->rawData;
+        if (RAPConverter::isRapified($file->content)) {
+            $file->isRapified = true;
         }
+
         return $file;
     }
 
-    public static function consumeFile(&$string,$header) {
-        $string = substr($string,$header->datasize);
-        return $string;
+    public static function consumeFile($stream,$header) {
+        if ($header->datasize > 0) {
+            fread($stream,$header->datasize);
+        }
     }
 
-    public function isRapified() {
-        return RAPConverter::isRapified($this->rawData);
+    public function __destruct()
+    {
+        if ($this->content) {
+            fclose($this->content);
+            $this->content = null;
+        }
     }
 }

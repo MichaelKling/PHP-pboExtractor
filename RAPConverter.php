@@ -7,21 +7,10 @@
  */
 class RAPConverter
 {
-    public $binaryString;
-    public $result;
-
-    protected function __construct(&$binaryString)
+    public static function isRapified($stream)
     {
-        $this->binaryString = $binaryString;
-    }
-
-    public static function unRap(&$binaryString) {
-        $rapConverter = new RAPConverter($binaryString);
-        return $rapConverter->convert();
-    }
-
-    public static function isRapified(&$string)
-    {
+        $string = fread($stream,4);
+        rewind($stream);
         if (strlen($string) > 4 && substr($string,0,4) == "\0raP") {
             return true;
         } else {
@@ -29,10 +18,4 @@ class RAPConverter
         }
     }
 
-    public function convert() {
-        $this->result = $this->binaryString;
-        //NOT IMPLEMENTED YET
-        //Informatins about how to convert: http://community.bistudio.com/wiki/raP_File_Format_-_Elite
-        return $this->result;
-    }
 }
