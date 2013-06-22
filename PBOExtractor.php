@@ -31,12 +31,7 @@ class PBOExtractor {
     }
 
     public static function extract($fileToExtract,$pboFile) {
-        $pboFile = fopen($pboFile, 'r');
-        $pboStream = fopen("php://memory", 'r+');
-        stream_copy_to_stream($pboFile,$pboStream);
-        rewind($pboStream);
-        fclose($pboFile);
-
+        $pboStream = fopen($pboFile, 'r');
         $result = PBOExtractor::extractFromStream($fileToExtract,$pboStream);
         fclose($pboStream);
         return $result;
