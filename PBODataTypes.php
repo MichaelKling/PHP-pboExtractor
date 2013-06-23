@@ -101,9 +101,6 @@ class PBOFileEntry {
 
     public function __destruct()
     {
-        if ($this->content) {
-            fclose($this->content);
-            $this->content = null;
-        }
+
     }
 }
